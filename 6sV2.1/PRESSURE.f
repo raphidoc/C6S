@@ -100,7 +100,7 @@ c  with interpolated layers
       if (xps.ge.1013) then
 C May want to look at some temperature,etc adjustement in that case: i.e extrapolate profile....
       dps=xps-p(1)
-      write(6,*) dps
+      !write(6,*) dps
       do i=1,9
       if (p(i).gt.dps) then
       p(i)=p(i)+dps

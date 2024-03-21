@@ -65,6 +65,7 @@ build CMakeFiles/C6S.dir/main.cpp.o: CXX_COMPILER__C6S_unscanned_Debug /home/rap
 
 build C6S: CXX_EXECUTABLE_LINKER__C6S_Debug CMakeFiles/C6S.dir/main.cpp.o
   FLAGS = -g
+  LINK_LIBRARIES = -ljsoncpp  -lnetcdf
   OBJECT_DIR = CMakeFiles/C6S.dir
   POST_BUILD = :
   PRE_LINK = :

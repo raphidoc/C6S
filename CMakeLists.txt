@@ -3,5 +3,12 @@ project(C6S)
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_executable(C6S main.cpp
-        )
+include_directories(/usr/include)
+
+add_executable(C6S
+        main.cpp
+        #main_threads.cpp
+)
+
+# Link jsoncpp library
+target_link_libraries(C6S jsoncpp netcdf)
