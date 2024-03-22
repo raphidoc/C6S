@@ -8,7 +8,9 @@ include_directories(/usr/include)
 add_executable(C6S
         #main.cpp
         #main_slow.cpp
-        main_threads_slow.cpp
+        #main_FIFO.cpp
+        main_FIFO_test.cpp
+        #main_threads_slow.cpp
 )
 
 # Link jsoncpp library

@@ -49,8 +49,8 @@ cmake_ninja_workdir = /home/raphael/CLionProjects/C6S/cmake-build-debug/
 
 build cmake_object_order_depends_target_C6S: phony || CMakeFiles/C6S.dir
 
-build CMakeFiles/C6S.dir/main_threads_slow.cpp.o: CXX_COMPILER__C6S_unscanned_Debug /home/raphael/CLionProjects/C6S/main_threads_slow.cpp || cmake_object_order_depends_target_C6S
-  DEP_FILE = CMakeFiles/C6S.dir/main_threads_slow.cpp.o.d
+build CMakeFiles/C6S.dir/main_FIFO_test.cpp.o: CXX_COMPILER__C6S_unscanned_Debug /home/raphael/CLionProjects/C6S/main_FIFO_test.cpp || cmake_object_order_depends_target_C6S
+  DEP_FILE = CMakeFiles/C6S.dir/main_FIFO_test.cpp.o.d
   FLAGS = -g -fdiagnostics-color=always
   OBJECT_DIR = CMakeFiles/C6S.dir
   OBJECT_FILE_DIR = CMakeFiles/C6S.dir
@@ -63,7 +63,7 @@ build CMakeFiles/C6S.dir/main_threads_slow.cpp.o: CXX_COMPILER__C6S_unscanned_De
 #############################################
 # Link the executable C6S
 
-build C6S: CXX_EXECUTABLE_LINKER__C6S_Debug CMakeFiles/C6S.dir/main_threads_slow.cpp.o
+build C6S: CXX_EXECUTABLE_LINKER__C6S_Debug CMakeFiles/C6S.dir/main_FIFO_test.cpp.o
   FLAGS = -g
   LINK_LIBRARIES = -ljsoncpp  -lnetcdf
   OBJECT_DIR = CMakeFiles/C6S.dir

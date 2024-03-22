@@ -8,10 +8,10 @@
 #include <chrono>
 #include <thread>
 #include <vector>
-#include <sstream>
-#include <sys/wait.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
-#include <poll.h>
 
 using namespace std;
 
@@ -28,9 +28,10 @@ std::vector<float> create_range(float min, float max, float step) {
 
 void cartesianProduct(std::vector<std::vector<float>>& dimensions, std::vector<std::vector<float>>& result, std::vector<float> temp, int dimensionIndex) {
     if (dimensionIndex == dimensions.size()) {
-        // Use emplace_back instead of push_back
-        result.emplace_back(temp);
+        // If we've processed all dimensions, add the current combination to the result
+        result.push_back(temp);
     } else {
+        // Otherwise, for each value in the current dimension, add it to the current combination and recurse on the next dimension
         for (float value : dimensions[dimensionIndex]) {
             temp[dimensionIndex] = value;
             cartesianProduct(dimensions, result, temp, dimensionIndex + 1);
@@ -39,105 +40,41 @@ void cartesianProduct(std::vector<std::vector<float>>& dimensions, std::vector<s
 }
 
 std::pair<std::string, int> exec(const char* cmd) {
-    int pipefd[2];
-    if (pipe(pipefd) == -1) {
-        perror("pipe");
-        exit(EXIT_FAILURE);
+    std::array<char, 128> buffer;
+    std::string result;
+    auto pipeDeleter = [](FILE* p) { if (p) fclose(p); };
+    std::unique_ptr<FILE, decltype(pipeDeleter)> pipe(popen(cmd, "r"), pipeDeleter);
+    if (!pipe) {
+        throw std::runtime_error("popen() failed!");
     }
-
-    pid_t pid = fork();
-    if (pid == -1) {
-        perror("fork");
-        exit(EXIT_FAILURE);
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+        result += buffer.data();
     }
-
-    if (pid == 0) { // Child process
-        cout << "redirectin std_in std_out\n";
-
-        // Redirect stdin (STDIN_FILENO) to pipefd[0]
-        if (dup2(STDIN_FILENO,pipefd[0]) == -1) {
-            perror("dup2");
-            exit(EXIT_FAILURE);
-        }
-
-        // Redirect stdout (STDOUT_FILENO) to pipefd[1]
-        if (dup2(STDOUT_FILENO,pipefd[1]) == -1) {
-            perror("dup2");
-            exit(EXIT_FAILURE);
-        } // Redirect stdout to the pipe
-
-        cout << "dup\n";
-
-        cout << cmd;
-
-        execl("/home/raphael/CLionProjects/C6S/6sV2.1/sixsV2.1", cmd, (char*) NULL);
-        perror("execl"); // execl doesn't return unless there's an error
-        exit(EXIT_FAILURE);
-    } else { // Parent process
-        //close(pipefd[1]); // Close write end of the pipe
-
-        //cout << "closed pipefd 1\n";
-
-        char buffer[3000];
-        std::string result;
-        ssize_t count;
-
-        struct pollfd pfd;
-        pfd.fd = pipefd[0];
-        pfd.events = POLLIN;
-
-        cout << "poll \n";
-
-        while (poll(&pfd, 1, 0) > 0) {
-            if ((count = read(pipefd[0], buffer, sizeof(buffer))) != 0) {
-                if (count == -1) {
-                    if (errno == EINTR) {
-                        continue;
-                    } else {
-                        perror("read");
-                        exit(EXIT_FAILURE);
-                    }
-                }
-                result += std::string(buffer, count);
-            }
-        }
-
-        cout << result;
-
-        cout << "waitpid \n";
-
-        int status;
-        waitpid(pid, &status, 0); // Wait for the child process to finish
-        int exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-
-        cout << "returning \n";
-
-        return std::make_pair(result, exitCode);
-
-
-    }
+    int exitCode = pclose(pipe.release());
+    return std::make_pair(result, exitCode);
 }
 
 std::string formatEstimatedTime(float estimatedTime) {
-    std::ostringstream oss;
+    /* The number of second in a century is 3,153,600,000
+     * which is larger than int and cause an overflow.
+     * Use a double instead */
     if (estimatedTime >= 60.0 * 60 * 24 * 365 * 100) {
-        oss << estimatedTime / (60.0 * 60 * 24 * 365 * 100) << " centuries";
+        return std::to_string(estimatedTime / (60.0 * 60 * 24 * 365 * 100)) + " centuries";
     } else if (estimatedTime >= 60.0 * 60 * 24 * 365) {
-        oss << estimatedTime / (60.0 * 60 * 24 * 365) << " years";
+        return std::to_string(estimatedTime / (60.0 * 60 * 24 * 365)) + " years";
     } else if (estimatedTime >= 60 * 60 * 24 * 30) {
-        oss << estimatedTime / (60 * 60 * 24 * 30) << " months";
+        return std::to_string(estimatedTime / (60 * 60 * 24 * 30)) + " months";
     } else if (estimatedTime >= 60 * 60 * 24 * 7) {
-        oss << estimatedTime / (60 * 60 * 24 * 7) << " weeks";
+        return std::to_string(estimatedTime / (60 * 60 * 24 * 7)) + " weeks";
     } else if (estimatedTime >= 60 * 60 * 24) {
-        oss << estimatedTime / (60 * 60 * 24) << " days";
+        return std::to_string(estimatedTime / (60 * 60 * 24)) + " days";
     } else if (estimatedTime >= 60 * 60) {
-        oss << estimatedTime / (60 * 60) << " hours";
+        return std::to_string(estimatedTime / (60 * 60)) + " hours";
     } else if (estimatedTime >= 60) {
-        oss << estimatedTime / 60 << " minutes";
+        return std::to_string(estimatedTime / 60) + " minutes";
     } else {
-        oss << estimatedTime << " seconds";
+        return std::to_string(estimatedTime) + " seconds";
     }
-    return oss.str();
 }
 
 #define ERRCODE 2
@@ -171,7 +108,17 @@ int main() {
             create_range(0.340f, 1.0f, 0.1f) // wavelength
     };
 
+    // Calculate the total number of combinations
+    int totalCombinations = 1;
+    for (const auto& dimension : dimensions) {
+        totalCombinations *= dimension.size();
+    }
+
     std::vector<std::vector<float>> combination;
+
+    // Reserve space in the combination vector
+    combination.reserve(totalCombinations);
+
     std::vector<float> temp(dimensions.size());
     cartesianProduct(dimensions, combination, temp, 0);
 
@@ -184,21 +131,19 @@ int main() {
 
     printf("number of combination: %i \n", combination.size());
 
-    std::vector<float> atmospheric_radiance_at_sensor_values(combination.size());
+    float* atmospheric_radiance_at_sensor_values = new float[combination.size()];
 
     // Create a vector to hold the commands
     std::vector<std::string> commands(combination.size());
 
     // Get starting time
     auto start1 = std::chrono::high_resolution_clock::now();
-    auto lastOutputTime1 = start1;
 
-    // Create a vectors of commands
     for (int i = 0; i < combination.size(); ++i) {
 
         char command[1000];
         sprintf(command,
-                "<<< \"\n"
+                "\"\n"
                 "0 # IGEOM\n"
                 "%f 0.0 %f %f 1 1 #sun_zenith sun_azimuth view_zenith view_azimuth month day\n"
                 "0 # IDATM no gas\n"
@@ -233,116 +178,149 @@ int main() {
         commands[i] = command;
 
         auto now = std::chrono::high_resolution_clock::now();
-        // Calculate the elapsed time since the last output
-        auto timeSinceLastOutput = std::chrono::duration_cast<std::chrono::seconds>(now - lastOutputTime1).count();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start1).count();
 
-        if (timeSinceLastOutput >= 1) { // To avoid division by zero
+        if (elapsed > 0) { // To avoid division by zero
 
-            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start1).count();
-
-            printf("\r(%i/%i) | ", static_cast<int>(i), combination.size());
+            printf("\r(%i/%i) | ", static_cast<int>(i+1), combination.size());
 
             float iterations_per_second = static_cast<float>(i) / elapsed;
             std::cout << "Iterations per second: " << iterations_per_second;
 
             float estimated_total_time = (combination.size() - i) / iterations_per_second;
             std::cout << " | Estimated time upon completion: " << formatEstimatedTime(estimated_total_time) << std::flush;
-
-            // Update the last output time
-            lastOutputTime1 = now;
-
         }
     }
+
+    printf("creating named pipe\n");
+
+    // Create two named pipes
+    const char * pipeInName = "/tmp/6s_pipe_in";
+    const char * pipeOutName = "/tmp/6s_pipe_out";
+    mkfifo(pipeInName, 0666);
+    mkfifo(pipeOutName, 0666);
+
+    printf("starting combination loop\n");
 
     // Get starting time
     auto start2 = std::chrono::high_resolution_clock::now();
-    auto lastOutputTime2 = start2;
 
     for (int i = 0; i < commands.size(); i++) {
 
-        auto result = exec(commands[i].c_str());
-//        std::string jsonOutput = result.first;
-//        int exitCode = result.second;
+        //printf("combination %i\n", i);
+
+//        // Open the first named pipe for writing
+//        int pipeInFd = open(pipeInName, O_WRONLY | O_NONBLOCK);
 //
-//        //cout << exitCode << "\n";
-//        if (exitCode != 0) {
-//            printf("Error on iteration: %i\n", i);
-//            std::cout << commands[i] << std::endl;
-//            throw std::runtime_error("Command failed with exit code: " + std::to_string(exitCode));
-//        }
+//        printf("Write command:\n %s", commands[i].c_str());
 //
-//        //std::cout << jsonOutput << std::endl;
+//        write(pipeInFd, commands[i].c_str(), commands[i].size());
 //
-//        Json::Value root;
-//        std::string errs;
-//        Json::CharReaderBuilder builder;
-//        Json::CharReader *reader = builder.newCharReader();
-//
-//        if (!reader->parse(jsonOutput.c_str(), jsonOutput.c_str() + jsonOutput.size(), &root, &errs)) {
-//            std::cout << errs << std::endl;
-//            //return EXIT_FAILURE;
-//        }
-//
-//        // Get the type of the root JSON value
-//        Json::ValueType type = root.type();
-//        // Convert the type to a string and print it
-//        std::string typeStr;
-//        switch (type) {
-//            case Json::nullValue:
-//                typeStr = "nullValue";
-//                break;
-//            case Json::intValue:
-//                typeStr = "intValue";
-//                break;
-//            case Json::uintValue:
-//                typeStr = "uintValue";
-//                break;
-//            case Json::realValue:
-//                typeStr = "realValue";
-//                break;
-//            case Json::stringValue:
-//                typeStr = "stringValue";
-//                break;
-//            case Json::booleanValue:
-//                typeStr = "booleanValue";
-//                break;
-//            case Json::arrayValue:
-//                typeStr = "arrayValue";
-//                break;
-//            case Json::objectValue:
-//                typeStr = "objectValue";
-//                break;
-//            default:
-//                typeStr = "unknown type";
-//        }
-//
-//        // Check if root is a JSON object
-//        if (root.isObject() && root.isMember("atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]")) {
-//            // Check if the key exists in the JSON object
-//            if (root.isMember("atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]")) {
-//
-//                std::string atmospheric_radiance_at_sensor =
-//                        root["atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]"].asString();
-//
-//                atmospheric_radiance_at_sensor_values[i] = std::stof(atmospheric_radiance_at_sensor);
-//
-//            } else {
-//                std::cout
-//                        << "Error: Key 'atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]' does not exist in the JSON object"
-//                        << std::endl;
-//            }
-//        } else {
-//            std::cout << jsonOutput << std::endl;
-//            throw std::runtime_error("Error: root is not a JSON object: " + typeStr);
-//        }
+//        // Close the first pipe
+//        close(pipeInFd);
+
+        // Open the second named pipe for reading
+        int pipeOutFd = open(pipeOutName, O_RDONLY | O_NONBLOCK);
+
+        // Execute the 6S program with the first named pipe as its input and the second named pipe as its output
+        std::string execCommand =
+                "echo " + commands[i] + " | "
+                "/home/raphael/CLionProjects/C6S/6sV2.1/sixsV2.1" + " > " + std::string(pipeOutName);
+
+        //cout << execCommand;
+
+        int exitCode = system(execCommand.c_str());
+
+        //printf("\ncommand exit code: %i\n", exitCode);
+
+        // Read the output from the second named pipe
+        char buffer[3000];
+        std::string jsonOutput;
+        while (read(pipeOutFd, buffer, sizeof(buffer)) != 0) {
+            jsonOutput += buffer;
+        }
+
+        // Close the second pipe
+        close(pipeOutFd);
+
+        //cout << jsonOutput << "\n";
+
+        if (exitCode != 0) {
+            printf("Error on iteration: %i\n", i);
+            cout << i << std::endl;
+            std::cout << commands[i] << std::endl;
+            throw std::runtime_error("Command failed with exit code: " + std::to_string(exitCode));
+        }
+
+        //std::cout << jsonOutput << std::endl;
+
+        Json::Value root;
+        std::string errs;
+        Json::CharReaderBuilder builder;
+        Json::CharReader *reader = builder.newCharReader();
+
+        if (!reader->parse(jsonOutput.c_str(), jsonOutput.c_str() + jsonOutput.size(), &root, &errs)) {
+            std::cout << errs << std::endl;
+            //return EXIT_FAILURE;
+        }
+
+        // Get the type of the root JSON value
+        Json::ValueType type = root.type();
+        // Convert the type to a string and print it
+        std::string typeStr;
+        switch (type) {
+            case Json::nullValue:
+                typeStr = "nullValue";
+                break;
+            case Json::intValue:
+                typeStr = "intValue";
+                break;
+            case Json::uintValue:
+                typeStr = "uintValue";
+                break;
+            case Json::realValue:
+                typeStr = "realValue";
+                break;
+            case Json::stringValue:
+                typeStr = "stringValue";
+                break;
+            case Json::booleanValue:
+                typeStr = "booleanValue";
+                break;
+            case Json::arrayValue:
+                typeStr = "arrayValue";
+                break;
+            case Json::objectValue:
+                typeStr = "objectValue";
+                break;
+            default:
+                typeStr = "unknown type";
+        }
+
+        // Check if root is a JSON object
+        if (root.isObject() && root.isMember("atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]")) {
+            // Check if the key exists in the JSON object
+            if (root.isMember("atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]")) {
+
+                std::string atmospheric_radiance_at_sensor =
+                        root["atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]"].asString();
+
+                atmospheric_radiance_at_sensor_values[i] = std::stof(atmospheric_radiance_at_sensor);
+
+            } else {
+                std::cout
+                        << "Error: Key 'atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]' does not exist in the JSON object"
+                        << std::endl;
+            }
+        } else {
+            std::cout << jsonOutput << std::endl;
+            throw std::runtime_error("Error: root is not a JSON object: " + typeStr);
+        }
 
         auto now = std::chrono::high_resolution_clock::now();
-        // Calculate the elapsed time since the last output
-        auto timeSinceLastOutput = std::chrono::duration_cast<std::chrono::seconds>(now - lastOutputTime2).count();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start1).count();
 
-        if (timeSinceLastOutput >= 1) { // To avoid division by zero
-
-            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start2).count();
+        if (elapsed > 0) { // To avoid division by zero
 
             printf("\r(%i/%i) | ", static_cast<int>(i), combination.size());
 
@@ -351,12 +329,12 @@ int main() {
 
             float estimated_total_time = (combination.size() - i) / iterations_per_second;
             std::cout << " | Estimated time upon completion: " << formatEstimatedTime(estimated_total_time) << std::flush;
-
-            // Update the last output time
-            lastOutputTime2 = now;
-
         }
     }
+
+    // Remove the named pipes
+    unlink(pipeInName);
+    unlink(pipeOutName);
 
 
     /* Always check the return code of every netCDF function call. In

@@ -9,9 +9,6 @@
 #include <thread>
 #include <vector>
 #include <sstream>
-#include <sys/wait.h>
-#include <unistd.h>
-#include <poll.h>
 
 using namespace std;
 
@@ -39,83 +36,18 @@ void cartesianProduct(std::vector<std::vector<float>>& dimensions, std::vector<s
 }
 
 std::pair<std::string, int> exec(const char* cmd) {
-    int pipefd[2];
-    if (pipe(pipefd) == -1) {
-        perror("pipe");
-        exit(EXIT_FAILURE);
+    std::array<char, 128> buffer;
+    std::string result;
+    auto pipeDeleter = [](FILE* p) { if (p) fclose(p); };
+    std::unique_ptr<FILE, decltype(pipeDeleter)> pipe(popen(cmd, "r"), pipeDeleter);
+    if (!pipe) {
+        throw std::runtime_error("popen() failed!");
     }
-
-    pid_t pid = fork();
-    if (pid == -1) {
-        perror("fork");
-        exit(EXIT_FAILURE);
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+        result += buffer.data();
     }
-
-    if (pid == 0) { // Child process
-        cout << "redirectin std_in std_out\n";
-
-        // Redirect stdin (STDIN_FILENO) to pipefd[0]
-        if (dup2(STDIN_FILENO,pipefd[0]) == -1) {
-            perror("dup2");
-            exit(EXIT_FAILURE);
-        }
-
-        // Redirect stdout (STDOUT_FILENO) to pipefd[1]
-        if (dup2(STDOUT_FILENO,pipefd[1]) == -1) {
-            perror("dup2");
-            exit(EXIT_FAILURE);
-        } // Redirect stdout to the pipe
-
-        cout << "dup\n";
-
-        cout << cmd;
-
-        execl("/home/raphael/CLionProjects/C6S/6sV2.1/sixsV2.1", cmd, (char*) NULL);
-        perror("execl"); // execl doesn't return unless there's an error
-        exit(EXIT_FAILURE);
-    } else { // Parent process
-        //close(pipefd[1]); // Close write end of the pipe
-
-        //cout << "closed pipefd 1\n";
-
-        char buffer[3000];
-        std::string result;
-        ssize_t count;
-
-        struct pollfd pfd;
-        pfd.fd = pipefd[0];
-        pfd.events = POLLIN;
-
-        cout << "poll \n";
-
-        while (poll(&pfd, 1, 0) > 0) {
-            if ((count = read(pipefd[0], buffer, sizeof(buffer))) != 0) {
-                if (count == -1) {
-                    if (errno == EINTR) {
-                        continue;
-                    } else {
-                        perror("read");
-                        exit(EXIT_FAILURE);
-                    }
-                }
-                result += std::string(buffer, count);
-            }
-        }
-
-        cout << result;
-
-        cout << "waitpid \n";
-
-        int status;
-        waitpid(pid, &status, 0); // Wait for the child process to finish
-        int exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-
-        cout << "returning \n";
-
-        return std::make_pair(result, exitCode);
-
-
-    }
+    int exitCode = pclose(pipe.release());
+    return std::make_pair(result, exitCode);
 }
 
 std::string formatEstimatedTime(float estimatedTime) {
@@ -148,28 +80,28 @@ int main() {
     char executable[] = "/home/raphael/CLionProjects/C6S/6sV2.1/sixsV2.1";
 
     // GOOD DIMENSION
-//    std::vector<std::vector<float>> dimensions = {
-//            create_range(0, 80, 10), // sun zenith
-//            create_range(0, 80, 10), // view zenith
-//            create_range(0, 180, 20), // relative azimuth
-//            {0.0f, 0.001f, 0.01f, 0.02f, 0.05f, 0.1f, 0.15f,
-//             0.2f, 0.3f, 0.5f, 0.7f, 1.0f, 1.3f, 1.6f,
-//             2.0f, 3.0f, 5.0f}, // taer550
-//            {750.0f, 1013.0f, 1100.0f}, // pressure at target
-//            {-1, -3}, // sensor altitude
-//            create_range(0.340f, 1.0f, 0.01f) // wavelength
-//    };
+    std::vector<std::vector<float>> dimensions = {
+            create_range(0, 80, 10), // sun zenith
+            create_range(0, 80, 10), // view zenith
+            create_range(0, 180, 20), // relative azimuth
+            {0.0f, 0.001f, 0.01f, 0.02f, 0.05f, 0.1f, 0.15f,
+             0.2f, 0.3f, 0.5f, 0.7f, 1.0f, 1.3f, 1.6f,
+             2.0f, 3.0f, 5.0f}, // taer550
+            {750.0f, 1013.0f, 1100.0f}, // pressure at target
+            {-1, -3}, // sensor altitude
+            create_range(0.340f, 1.0f, 0.01f) // wavelength
+    };
 
     // TEST DIMENSION
-    std::vector<std::vector<float>> dimensions = {
-            create_range(0, 80, 40), // sun zenith
-            create_range(0, 80, 40), // view zenith
-            create_range(0, 180, 30), // relative azimuth
-            {0.0f, 3.0f}, // taer550
-            {1013.0f}, // pressure at target
-            {-1}, // sensor altitude
-            create_range(0.340f, 1.0f, 0.1f) // wavelength
-    };
+//    std::vector<std::vector<float>> dimensions = {
+//            create_range(0, 80, 40), // sun zenith
+//            create_range(0, 80, 40), // view zenith
+//            create_range(0, 180, 30), // relative azimuth
+//            {0.0f, 3.0f}, // taer550
+//            {1013.0f}, // pressure at target
+//            {-1}, // sensor altitude
+//            create_range(0.340f, 1.0f, 0.1f) // wavelength
+//    };
 
     std::vector<std::vector<float>> combination;
     std::vector<float> temp(dimensions.size());
@@ -193,12 +125,11 @@ int main() {
     auto start1 = std::chrono::high_resolution_clock::now();
     auto lastOutputTime1 = start1;
 
-    // Create a vectors of commands
     for (int i = 0; i < combination.size(); ++i) {
 
         char command[1000];
         sprintf(command,
-                "<<< \"\n"
+                "echo \"\n"
                 "0 # IGEOM\n"
                 "%f 0.0 %f %f 1 1 #sun_zenith sun_azimuth view_zenith view_azimuth month day\n"
                 "0 # IDATM no gas\n"
@@ -216,14 +147,15 @@ int main() {
                 "0 # IGROUN 0 = rho\n"
                 "0 # surface reflectance\n"
                 "-1 # IRAPP no atmospheric correction\n"
-                "\"",
+                "\" | %s",
                 combination[i][0],
                 combination[i][1],
                 combination[i][2],
                 combination[i][3],
                 combination[i][4],
                 combination[i][5],
-                combination[i][6]
+                combination[i][6],
+                executable
         );
 
 
@@ -258,7 +190,7 @@ int main() {
     auto start2 = std::chrono::high_resolution_clock::now();
     auto lastOutputTime2 = start2;
 
-    for (int i = 0; i < commands.size(); i++) {
+    for (int i = 6295; i < commands.size(); i++) {
 
         auto result = exec(commands[i].c_str());
 //        std::string jsonOutput = result.first;
