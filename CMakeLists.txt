@@ -6,8 +6,9 @@ set(CMAKE_CXX_STANDARD 17)
 include_directories(/usr/include)
 
 add_executable(C6S
-        main.cpp
-        #main_threads.cpp
+        #main.cpp
+        #main_slow.cpp
+        main_threads_slow.cpp
 )
 
 # Link jsoncpp library

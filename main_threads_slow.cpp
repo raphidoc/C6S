@@ -165,10 +165,10 @@ void runModelAndAccumulate(const char* executable, int start, int end, std::vect
             // Check if the key exists in the JSON object
             if (root.isMember("atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]")) {
 
-                float atmospheric_radiance_at_sensor =
-                        root["atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]"].asFloat();
+                std::string atmospheric_radiance_at_sensor =
+                        root["atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]"].asString();
 
-                atmospheric_radiance_at_sensor_values[i] = atmospheric_radiance_at_sensor;
+                atmospheric_radiance_at_sensor_values[i] = std::stof(atmospheric_radiance_at_sensor);
 
             } else {
                 std::cout << "Error: Key 'atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]' does not exist in the JSON object" << std::endl;
@@ -228,7 +228,7 @@ int main() {
     float* atmospheric_radiance_at_sensor_values = new float[combination.size()];
 
     // Determine the number of threads to use
-    int numThreads = std::thread::hardware_concurrency() -11;
+    int numThreads = std::thread::hardware_concurrency();
 
     // Create a vector to hold the thread objects
     std::vector<std::thread> threads(numThreads);
@@ -250,23 +250,23 @@ int main() {
 
     auto start = std::chrono::high_resolution_clock::now();
 
-//    while (counter < combination.size()) {
-//        //std::this_thread::sleep_for(std::chrono::seconds(1)); // Sleep for a second
-//
-//        auto now = std::chrono::high_resolution_clock::now();
-//        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start).count();
-//
-//        if (elapsed > 0) { // To avoid division by zero
-//
-//            printf("\r(%i/%i) | ", static_cast<int>(counter), combination.size());
-//
-//            float iterations_per_second = static_cast<float>(counter) / elapsed;
-//            std::cout << "Iterations per second: " << iterations_per_second;
-//
-//            float estimated_total_time = (combination.size() - counter) / iterations_per_second;
-//            std::cout << " | Estimated time upon completion: " << formatEstimatedTime(estimated_total_time) << std::flush;
-//        }
-//    }
+    while (counter < combination.size()) {
+        //std::this_thread::sleep_for(std::chrono::seconds(1)); // Sleep for a second
+
+        auto now = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start).count();
+
+        if (elapsed > 0) { // To avoid division by zero
+
+            printf("\r(%i/%i) | ", static_cast<int>(counter), combination.size());
+
+            float iterations_per_second = static_cast<float>(counter) / elapsed;
+            std::cout << "Iterations per second: " << iterations_per_second;
+
+            float estimated_total_time = (combination.size() - counter) / iterations_per_second;
+            std::cout << " | Estimated time upon completion: " << formatEstimatedTime(estimated_total_time) << std::flush;
+        }
+    }
 
     // Wait for all threads to finish
     for (auto& thread : threads) {

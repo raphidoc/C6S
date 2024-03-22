@@ -81,28 +81,28 @@ int main() {
     char executable[] = "/home/raphael/CLionProjects/C6S/6sV2.1/sixsV2.1";
 
     // GOOD DIMENSION
-//    std::vector<std::vector<float>> dimensions = {
-//            create_range(0, 80, 10), // sun zenith
-//            create_range(0, 80, 10), // view zenith
-//            create_range(0, 180, 20), // relative azimuth
-//            {0.0f, 0.001f, 0.01f, 0.02f, 0.05f, 0.1f, 0.15f,
-//             0.2f, 0.3f, 0.5f, 0.7f, 1.0f, 1.3f, 1.6f,
-//             2.0f, 3.0f, 5.0f}, // taer550
-//            {750.0f, 1013.0f, 1100.0f}, // pressure at target
-//            {-1, -3}, // sensor altitude
-//            create_range(0.340f, 1.0f, 0.01f) // wavelength
-//    };
+    std::vector<std::vector<float>> dimensions = {
+            create_range(0, 80, 10), // sun zenith
+            create_range(0, 80, 10), // view zenith
+            create_range(0, 180, 20), // relative azimuth
+            {0.0f, 0.001f, 0.01f, 0.02f, 0.05f, 0.1f, 0.15f,
+             0.2f, 0.3f, 0.5f, 0.7f, 1.0f, 1.3f, 1.6f,
+             2.0f, 3.0f, 5.0f}, // taer550
+            {750.0f, 1013.0f, 1100.0f}, // pressure at target
+            {-1, -3}, // sensor altitude
+            create_range(0.340f, 1.0f, 0.01f) // wavelength
+    };
 
     // TEST DIMENSION
-    std::vector<std::vector<float>> dimensions = {
-            create_range(0, 80, 40), // sun zenith
-            create_range(0, 80, 40), // view zenith
-            create_range(0, 180, 30), // relative azimuth
-            {0.0f, 3.0f}, // taer550
-            {1013.0f}, // pressure at target
-            {-1}, // sensor altitude
-            create_range(0.340f, 1.0f, 0.1f) // wavelength
-    };
+//    std::vector<std::vector<float>> dimensions = {
+//            create_range(0, 80, 40), // sun zenith
+//            create_range(0, 80, 40), // view zenith
+//            create_range(0, 180, 30), // relative azimuth
+//            {0.0f, 3.0f}, // taer550
+//            {1013.0f}, // pressure at target
+//            {-1}, // sensor altitude
+//            create_range(0.340f, 1.0f, 0.1f) // wavelength
+//    };
 
     std::vector<std::vector<float>> combination;
     std::vector<float> temp(dimensions.size());
@@ -119,13 +119,17 @@ int main() {
 
     float* atmospheric_radiance_at_sensor_values = new float[combination.size()];
 
+    // Create a vector to hold the commands
+    std::vector<std::string> commands(combination.size());
+
     // Get starting time
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start1 = std::chrono::high_resolution_clock::now();
 
-    for (int i = 0; i <= combination.size(); ++i) {
+    for (int i = 0; i < combination.size(); ++i) {
 
-        char params[800];
-        sprintf(params,
+        char command[1000];
+        sprintf(command,
+                "echo \"\n"
                 "0 # IGEOM\n"
                 "%f 0.0 %f %f 1 1 #sun_zenith sun_azimuth view_zenith view_azimuth month day\n"
                 "0 # IDATM no gas\n"
@@ -142,29 +146,45 @@ int main() {
                 "0 # IDIREC\n"
                 "0 # IGROUN 0 = rho\n"
                 "0 # surface reflectance\n"
-                "-1 # IRAPP no atmospheric correction\n",
+                "-1 # IRAPP no atmospheric correction\n"
+                "\" | %s",
                 combination[i][0],
                 combination[i][1],
                 combination[i][2],
                 combination[i][3],
                 combination[i][4],
                 combination[i][5],
-                combination[i][6]
+                combination[i][6],
+                executable
         );
 
-        // pointer to store the command
-        char command[200];
 
-        strcpy(command, "echo \"\n");
-        strcat(command, params);
-        strcat(command, "\" | ");
-        strcat(command, executable);
+        //cout << command << std::endl;
+        //cout << i << std::endl;
 
-//        std::cout << command << std::endl;
+        commands[i] = command;
 
-//        std::string jsonOutput = exec(command);
-//        std::cout << jsonOutput << std::endl;
-        auto result = exec(command);
+        auto now = std::chrono::high_resolution_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start1).count();
+
+        if (elapsed > 0) { // To avoid division by zero
+
+            printf("\r(%i/%i) | ", static_cast<int>(i), combination.size());
+
+            float iterations_per_second = static_cast<float>(i) / elapsed;
+            std::cout << "Iterations per second: " << iterations_per_second;
+
+            float estimated_total_time = (combination.size() - i) / iterations_per_second;
+            std::cout << " | Estimated time upon completion: " << formatEstimatedTime(estimated_total_time) << std::flush;
+        }
+    }
+
+    // Get starting time
+    auto start2 = std::chrono::high_resolution_clock::now();
+
+    for (int i = 6295; i < commands.size(); i++) {
+
+        auto result = exec(commands[i].c_str());
         std::string jsonOutput = result.first;
         int exitCode = result.second;
 
@@ -172,11 +192,11 @@ int main() {
         if (exitCode != 0) {
             printf("Error on iteration: %i\n", i);
             cout << i << std::endl;
-            std::cout << command << std::endl;
+            std::cout << commands[i] << std::endl;
             throw std::runtime_error("Command failed with exit code: " + std::to_string(exitCode));
         }
 
-//        std::cout << jsonOutput << std::endl;
+        //std::cout << jsonOutput << std::endl;
 
         Json::Value root;
         std::string errs;
@@ -226,10 +246,10 @@ int main() {
             // Check if the key exists in the JSON object
             if (root.isMember("atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]")) {
 
-                float atmospheric_radiance_at_sensor =
-                        root["atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]"].asFloat();
+                std::string atmospheric_radiance_at_sensor =
+                        root["atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]"].asString();
 
-                atmospheric_radiance_at_sensor_values[i] = atmospheric_radiance_at_sensor;
+                atmospheric_radiance_at_sensor_values[i] = std::stof(atmospheric_radiance_at_sensor);
 
             } else {
                 std::cout
@@ -237,11 +257,12 @@ int main() {
                         << std::endl;
             }
         } else {
+            std::cout << jsonOutput << std::endl;
             throw std::runtime_error("Error: root is not a JSON object: " + typeStr);
         }
 
         auto now = std::chrono::high_resolution_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start).count();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start1).count();
 
         if (elapsed > 0) { // To avoid division by zero
 
@@ -255,9 +276,6 @@ int main() {
         }
     }
 
-    auto now = std::chrono::high_resolution_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now- start).count();
-    printf("Elapsed seconds: %i", elapsed);
 
     /* Always check the return code of every netCDF function call. In
      * this example program, any retval which is not equal to NC_NOERR

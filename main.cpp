@@ -247,10 +247,10 @@ int main() {
             // Check if the key exists in the JSON object
             if (root.isMember("atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]")) {
 
-                float atmospheric_radiance_at_sensor =
-                        root["atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]"].asFloat();
+                std::string atmospheric_radiance_at_sensor =
+                        root["atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]"].asString();
 
-                atmospheric_radiance_at_sensor_values[i] = atmospheric_radiance_at_sensor;
+                atmospheric_radiance_at_sensor_values[i] = std::stof(atmospheric_radiance_at_sensor);
 
             } else {
                 std::cout << "Error: Key 'atmospheric_radiance_at_sensor_[W m-2 sr-1 um-1]' does not exist in the JSON object" << std::endl;
